@@ -1,5 +1,6 @@
 package com.cardioguard.service.impl;
 
+import com.cardioguard.config.HealthMonitorWebSocketHandler;
 import com.cardioguard.entity.HeartRateData;
 import com.cardioguard.service.HeartRateService;
 import com.influxdb.client.InfluxDBClient;
@@ -16,6 +17,7 @@ import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 心率数据服务实现类(使用InfluxDB)
