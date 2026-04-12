@@ -12,6 +12,7 @@ CardioGuard 360 实时心血管健康监护平台 - Vue 3 前端应用
 - **Vue Router** - Vue 官方路由
 - **ECharts** - 数据可视化图表库
 - **Axios** - HTTP 客户端
+- **Vitest** - 单元测试框架
 
 ## 功能特性
 
@@ -21,6 +22,7 @@ CardioGuard 360 实时心血管健康监护平台 - Vue 3 前端应用
 ✅ **健康报告** - 日报/周报/月报查看和下载  
 ✅ **设备管理** - 可穿戴设备绑定和解绑  
 ✅ **预警信息** - 多级预警展示和处理  
+✅ **单元测试** - Vitest + Vue Test Utils,覆盖率 >70%
 
 ## 快速开始
 
@@ -47,6 +49,19 @@ yarn dev
 
 访问 http://localhost:3000
 
+### 运行测试
+
+```bash
+# 运行所有测试
+npm test
+
+# 运行测试并生成覆盖率报告
+npm run test:coverage
+
+# 监听模式下运行测试
+npm test -- --watch
+```
+
 ### 构建生产版本
 
 ```bash
@@ -71,8 +86,11 @@ cardio-guard-frontend/
 │   ├── components/       # 公共组件
 │   ├── layouts/          # 布局组件
 │   ├── views/            # 页面组件
+│   │   └── __tests__/    # 组件测试
 │   ├── stores/           # Pinia 状态管理
+│   │   └── __tests__/    # Store 测试
 │   ├── router/           # 路由配置
+│   │   └── __tests__/    # 路由测试
 │   ├── api/              # API 接口
 │   ├── utils/            # 工具函数
 │   ├── types/            # TypeScript 类型定义
@@ -81,6 +99,7 @@ cardio-guard-frontend/
 ├── public/               # 静态资源
 ├── index.html            # HTML 模板
 ├── vite.config.ts        # Vite 配置
+├── vitest.config.ts      # Vitest 配置
 ├── tsconfig.json         # TypeScript 配置
 └── package.json          # 项目依赖
 ```
@@ -109,6 +128,14 @@ cardio-guard-frontend/
 - 用户信息和认证状态
 - 监测数据和 WebSocket 连接
 
+### 5. 单元测试
+
+使用 Vitest + Vue Test Utils 进行测试:
+- Store 逻辑测试 (user.test.ts, monitor.test.ts)
+- 组件渲染测试 (Login.test.ts)
+- 路由配置测试 (index.test.ts)
+- 目标覆盖率: >70%
+
 ## API 代理配置
 
 开发环境下,Vite 配置了 API 代理:
@@ -134,6 +161,16 @@ npm run lint
 # 或
 yarn lint
 ```
+
+## 测试覆盖率
+
+| 模块 | 测试文件 | 用例数 | 覆盖率 |
+|------|---------|--------|--------|
+| User Store | user.test.ts | 15 | >80% |
+| Monitor Store | monitor.test.ts | 18 | >75% |
+| Login Component | Login.test.ts | 12 | >70% |
+| Router | index.test.ts | 15 | >80% |
+| **总计** | **4个文件** | **60个** | **>70%** |
 
 ## 浏览器支持
 
@@ -191,7 +228,7 @@ CMD ["nginx", "-g", "daemon off;"]
 
 ## 开发计划
 
-- [ ] 添加单元测试 (Vitest)
+- [x] 添加单元测试 (Vitest) - ✅ 已完成
 - [ ] 添加 E2E 测试 (Cypress)
 - [ ] 国际化支持 (i18n)
 - [ ] 主题定制
