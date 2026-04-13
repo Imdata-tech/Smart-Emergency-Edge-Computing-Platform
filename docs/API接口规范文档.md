@@ -617,7 +617,518 @@ ws://localhost:8080/api/ws/health-monitor?userId=1
 
 ---
 
+## 7. 前端集成指南
+
+### 7.1 Vue 3 项目结构
+
+```
+cardio-guard-frontend/
+├── src/
+│   ├── stores/           # Pinia 状态管理
+│   │   ├── user.ts       # 用户认证 Store
+│   │   └── monitor.ts    # 监测数据 Store
+│   ├── views/            # 页面组件
+│   │   ├── Login.vue     # 登录页
+│   │   ├── Dashboard.vue # 数据看板
+│   │   └── Monitor.vue   # 实时监测
+│   └── router/           # 路由配置
+```
+
+### 7.2 用户认证集成
+
+**登录流程:**
+
+```typescript
+// stores/user.ts
+import { defineStore } from 'pinia'
+import axios from 'axios'
+
+export const useUserStore = defineStore('user', () => {
+  const token = ref<string>('')
+  const userInfo = ref<UserInfo | null>(null)
+
+  async function login(username: string, password: string) {
+    // 调用后端登录接口
+    const response = await axios.post(
+      `/api/auth/login?username=${username}&password=${password}`
+    )
+    
+    // 保存 Token
+    token.value = response.data.data.token
+    localStorage.setItem('token', token.value)
+    
+    // 获取用户信息
+    userInfo.value = response.data.data.user
+  }
+
+  async function fetchUserInfo() {
+    const response = await axios.get('/api/auth/info', {
+      headers: { Authorization: `Bearer ${token.value}` }
+    })
+    userInfo.value = response.data.data
+  }
+
+  function logout() {
+    token.value = ''
+    userInfo.value = null
+    localStorage.removeItem('token')
+  }
+
+  return { token, userInfo, login, logout, fetchUserInfo }
+})
+```
+
+**路由守卫:**
+
+```typescript
+// router/index.ts
+router.beforeEach((to, from, next) => {
+  const token = localStorage.getItem('token')
+  
+  if (to.meta.requiresAuth && !token) {
+    next('/login')
+  } else if (to.path === '/login' && token) {
+    next('/')
+  } else {
+    next()
+  }
+})
+```
+
+### 7.3 WebSocket 实时通信
+
+**连接管理:**
+
+```typescript
+// stores/monitor.ts
+export const useMonitorStore = defineStore('monitor', () => {
+  const heartRateData = ref<HeartRateData[]>([])
+  const latestData = ref<HeartRateData | null>(null)
+  const wsConnected = ref(false)
+  let ws: WebSocket | null = null
+
+  function connectWebSocket(userId: number) {
+    const token = localStorage.getItem('token')
+    // 注意：根据实际后端实现，可能需要将 token 放在 header 或 query param 中
+    const wsUrl = `ws://localhost:8080/api/ws/health-monitor?userId=${userId}`
+    
+    ws = new WebSocket(wsUrl)
+    
+    ws.onopen = () => {
+      console.log('WebSocket 连接成功')
+      wsConnected.value = true
+      // 可选：发送鉴权消息
+      // ws.send(JSON.stringify({ type: 'auth', token: token }))
+    }
+    
+    ws.onmessage = (event) => {
+      const data = JSON.parse(event.data)
+      handleRealtimeData(data)
+    }
+    
+    ws.onerror = (error) => {
+      console.error('WebSocket 错误:', error)
+      wsConnected.value = false
+    }
+    
+    ws.onclose = () => {
+      console.log('WebSocket 连接关闭')
+      wsConnected.value = false
+      // 5秒后自动重连
+      setTimeout(() => connectWebSocket(userId), 5000)
+    }
+  }
+
+  function handleRealtimeData(data: any) {
+    if (data.type === 'realtime-data') {
+      heartRateData.value.push(data.data)
+      latestData.value = data.data
+      
+      // 保持最近100条数据
+      if (heartRateData.value.length > 100) {
+        heartRateData.value.shift()
+      }
+    } else if (data.type === 'ALERT') {
+      // 处理预警消息
+      console.warn('收到预警:', data.message)
+    }
+  }
+
+  function disconnectWebSocket() {
+    if (ws) {
+      ws.close()
+      ws = null
+    }
+  }
+
+  return {
+    heartRateData,
+    latestData,
+    wsConnected,
+    connectWebSocket,
+    disconnectWebSocket
+  }
+})
+```
+
+**组件中使用:**
+
+```vue
+<!-- views/Monitor.vue -->
+<script setup lang="ts">
+import { onMounted, onUnmounted } from 'vue'
+import { useMonitorStore } from '@/stores/monitor'
+import { useUserStore } from '@/stores/user'
+
+const monitorStore = useMonitorStore()
+const userStore = useUserStore()
+
+onMounted(() => {
+  if (userStore.userInfo?.id) {
+    monitorStore.connectWebSocket(userStore.userInfo.id)
+  }
+})
+
+onUnmounted(() => {
+  monitorStore.disconnectWebSocket()
+})
+</script>
+
+<template>
+  <div class="monitor">
+    <div class="heart-rate">
+      {{ monitorStore.latestData?.heartRate || '--' }} bpm
+    </div>
+  </div>
+</template>
+```
+
+### 7.4 ECharts 数据可视化
+
+**心率趋势图:**
+
+```vue
+<!-- views/Dashboard.vue -->
+<script setup lang="ts">
+import VChart from 'vue-echarts'
+import { use } from 'echarts/core'
+import { CanvasRenderer } from 'echarts/renderers'
+import { LineChart } from 'echarts/charts'
+import { GridComponent, TooltipComponent } from 'echarts/components'
+import { useMonitorStore } from '@/stores/monitor'
+import { computed } from 'vue'
+
+// 按需引入 ECharts 组件
+use([CanvasRenderer, LineChart, GridComponent, TooltipComponent])
+
+const monitorStore = useMonitorStore()
+
+const chartOption = computed(() => ({
+  tooltip: {
+    trigger: 'axis',
+    formatter: '{b}<br/>心率: {c} bpm'
+  },
+  grid: {
+    left: '3%',
+    right: '4%',
+    bottom: '3%',
+    containLabel: true
+  },
+  xAxis: {
+    type: 'category',
+    boundaryGap: false,
+    data: monitorStore.heartRateData.map(d => 
+      new Date(d.measureTime).toLocaleTimeString()
+    )
+  },
+  yAxis: {
+    type: 'value',
+    name: '心率 (bpm)',
+    min: 40,
+    max: 180
+  },
+  series: [{
+    name: '心率',
+    type: 'line',
+    smooth: true,
+    data: monitorStore.heartRateData.map(d => d.heartRate),
+    itemStyle: { color: '#409eff' },
+    areaStyle: {
+      color: {
+        type: 'linear',
+        x: 0, y: 0, x2: 0, y2: 1,
+        colorStops: [
+          { offset: 0, color: 'rgba(64, 158, 255, 0.3)' },
+          { offset: 1, color: 'rgba(64, 158, 255, 0.05)' }
+        ]
+      }
+    }
+  }]
+}))
+</script>
+
+<template>
+  <v-chart :option="chartOption" autoresize style="height: 350px" />
+</template>
+```
+
+### 7.5 Axios 拦截器配置
+
+**请求拦截器 - 自动添加 Token:**
+
+```typescript
+// utils/request.ts
+import axios from 'axios'
+import { ElMessage } from 'element-plus'
+
+const service = axios.create({
+  baseURL: '/api',
+  timeout: 10000
+})
+
+// 请求拦截器
+service.interceptors.request.use(
+  config => {
+    const token = localStorage.getItem('token')
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`
+    }
+    return config
+  },
+  error => {
+    return Promise.reject(error)
+  }
+)
+
+// 响应拦截器
+service.interceptors.response.use(
+  response => {
+    const res = response.data
+    if (res.code !== 200) {
+      ElMessage.error(res.message || '请求失败')
+      return Promise.reject(new Error(res.message))
+    }
+    return res
+  },
+  error => {
+    if (error.response?.status === 401) {
+      ElMessage.error('未授权,请重新登录')
+      localStorage.removeItem('token')
+      window.location.href = '/login'
+    }
+    return Promise.reject(error)
+  }
+)
+
+export default service
+```
+
+### 7.6 历史数据查询
+
+**查询接口封装:**
+
+```typescript
+// api/health.ts
+import request from '@/utils/request'
+
+export function queryHeartRateData(params: {
+  userId: number
+  startTime: string
+  endTime: string
+}) {
+  return request.get('/health/heart-rate/query', { params })
+}
+
+export function getAverageHeartRate(params: {
+  userId: number
+  startTime: string
+  endTime: string
+}) {
+  return request.get('/health/heart-rate/average', { params })
+}
+```
+
+**组件中调用:**
+
+```vue
+<script setup lang="ts">
+import { queryHeartRateData } from '@/api/health'
+
+const loadHistoryData = async () => {
+  try {
+    const data = await queryHeartRateData({
+      userId: 1,
+      startTime: '2024-01-15T00:00:00',
+      endTime: '2024-01-15T23:59:59'
+    })
+    console.log('历史数据:', data)
+  } catch (error) {
+    console.error('查询失败:', error)
+  }
+}
+</script>
+```
+
+### 7.7 设备管理集成
+
+**设备列表查询:**
+
+```typescript
+// api/device.ts
+import request from '@/utils/request'
+
+export function getUserDevices(userId: number) {
+  return request.get(`/device/list?userId=${userId}`)
+}
+
+export function bindDevice(data: {
+  userId: number
+  serialNumber: string
+}) {
+  return request.post('/auth/bind-device', null, { params: data })
+}
+
+export function unbindDevice(userId: number, deviceId: number) {
+  return request.post('/auth/unbind-device', null, { params: { userId, deviceId } })
+}
+```
+
+### 7.8 预警信息处理
+
+**预警列表查询:**
+
+```typescript
+// api/alert.ts
+import request from '@/utils/request'
+
+export function getAlerts(params: {
+  userId?: number
+  status?: string
+  alertLevel?: string
+}) {
+  return request.get('/alert/list', { params })
+}
+
+export function processAlert(data: {
+  id: number
+  doctorId: number
+  doctorAdvice: string
+}) {
+  return request.put('/alert/process', data)
+}
+```
+
+### 7.9 前端性能优化
+
+**代码分割:**
+
+```typescript
+// router/index.ts - 路由懒加载
+{
+  path: '/dashboard',
+  component: () => import('@/views/Dashboard.vue')
+}
+```
+
+**ECharts 按需引入:**
+
+```typescript
+// 只引入需要的图表类型,减少打包体积
+import { LineChart, PieChart } from 'echarts/charts'
+use([LineChart, PieChart])
+```
+
+**防抖处理:**
+
+```typescript
+import { debounce } from 'lodash-es'
+
+const updateChart = debounce(() => {
+  // 更新图表
+}, 300)
+```
+
+### 7.10 错误处理最佳实践
+
+**全局错误处理:**
+
+```typescript
+// main.ts
+app.config.errorHandler = (err, vm, info) => {
+  console.error('Vue Error:', err, info)
+  // 上报错误到监控系统
+}
+```
+
+**异步错误处理:**
+
+```typescript
+try {
+  await userStore.login(username, password)
+  ElMessage.success('登录成功')
+} catch (error: any) {
+  ElMessage.error(error.response?.data?.message || '登录失败')
+}
+```
+
+---
+
+## 8. 测试指南
+
+### 8.1 API 测试
+
+**使用 Postman 或 curl 测试:**
+
+```bash
+# 登录测试
+curl -X POST "http://localhost:8080/api/auth/login?username=patient1&password=123456"
+
+# 查询心率数据
+curl -X GET "http://localhost:8080/api/health/heart-rate/query?userId=1&startTime=2024-01-01T00:00:00&endTime=2024-01-01T23:59:59" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+### 8.2 WebSocket 测试
+
+**使用 wscat 测试:**
+
+```bash
+# 安装 wscat
+npm install -g wscat
+
+# 连接 WebSocket
+wscat -c "ws://localhost:8080/api/ws/health-monitor?userId=1"
+```
+
+---
+
+## 9. 常见问题
+
+### Q1: Token 过期如何处理?
+
+**A:** 在响应拦截器中捕获 401 错误,清除本地 Token 并跳转到登录页。
+
+### Q2: WebSocket 断线如何重连?
+
+**A:** 在 `onclose` 事件中使用 `setTimeout` 延迟5秒后重新调用 `connectWebSocket()`。
+
+### Q3: ECharts 图表不显示?
+
+**A:** 确保已正确注册所需的组件和图表类型,检查容器是否有明确的高度。
+
+### Q4: 跨域问题如何解决?
+
+**A:** 开发环境使用 Vite 代理,生产环境配置 Nginx 反向代理。
+
+---
+
 ## 更新日志
+
+### v1.2.0 (2026-04-12)
+- 新增前端 Vue 3 项目
+- 完善 WebSocket 实时通信规范
+- 添加前端集成示例代码
+- 补充 ECharts 数据可视化接口说明
 
 ### v1.0.0 (2024-01-01)
 - 初始版本发布
@@ -627,4 +1138,5 @@ ws://localhost:8080/api/ws/health-monitor?userId=1
 ---
 
 **文档维护:** CardioGuard Team  
-**联系方式:** api-support@cardioguard.com
+**联系方式:** api-support@cardioguard.com  
+**最后更新:** 2026-04-12
