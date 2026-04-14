@@ -43,6 +43,12 @@ const routes: RouteRecordRaw[] = [
         name: 'Alerts',
         component: () => import('@/views/Alerts.vue'),
         meta: { title: '预警信息', requiresAuth: true }
+      },
+      {
+        path: 'ecg',
+        name: 'EcgMonitor',
+        component: () => import('@/views/EcgMonitor.vue'),
+        meta: { title: 'ECG心电图', requiresAuth: true }
       }
     ]
   }

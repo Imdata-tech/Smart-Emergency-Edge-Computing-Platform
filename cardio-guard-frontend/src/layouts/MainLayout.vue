@@ -37,6 +37,11 @@
           <el-icon><Bell /></el-icon>
           <span>预警信息</span>
         </el-menu-item>
+        
+        <el-menu-item index="/ecg">
+          <el-icon><FirstAidKit /></el-icon>
+          <span>ECG心电图</span>
+        </el-menu-item>
       </el-menu>
     </el-aside>
     
@@ -77,6 +82,7 @@
 import { computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessageBox } from 'element-plus'
+import { Odometer, Monitor, Document, Cpu, Bell, FirstAidKit, User, ArrowDown } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
 
 const router = useRouter()
