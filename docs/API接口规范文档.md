@@ -773,7 +773,7 @@ export const useMonitorStore = defineStore('monitor', () => {
 
 **组件中使用:**
 
-```vue
+``vue
 <!-- views/Monitor.vue -->
 <script setup lang="ts">
 import { onMounted, onUnmounted } from 'vue'
@@ -807,7 +807,7 @@ onUnmounted(() => {
 
 **心率趋势图:**
 
-```vue
+``vue
 <!-- views/Dashboard.vue -->
 <script setup lang="ts">
 import VChart from 'vue-echarts'
@@ -876,7 +876,7 @@ const chartOption = computed(() => ({
 
 **请求拦截器 - 自动添加 Token:**
 
-```typescript
+``typescript
 // utils/request.ts
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
@@ -927,7 +927,7 @@ export default service
 
 **查询接口封装:**
 
-```typescript
+``typescript
 // api/health.ts
 import request from '@/utils/request'
 
@@ -950,7 +950,7 @@ export function getAverageHeartRate(params: {
 
 **组件中调用:**
 
-```vue
+``vue
 <script setup lang="ts">
 import { queryHeartRateData } from '@/api/health'
 
@@ -973,7 +973,7 @@ const loadHistoryData = async () => {
 
 **设备列表查询:**
 
-```typescript
+``typescript
 // api/device.ts
 import request from '@/utils/request'
 
@@ -997,7 +997,7 @@ export function unbindDevice(userId: number, deviceId: number) {
 
 **预警列表查询:**
 
-```typescript
+``typescript
 // api/alert.ts
 import request from '@/utils/request'
 
@@ -1022,7 +1022,7 @@ export function processAlert(data: {
 
 **代码分割:**
 
-```typescript
+``typescript
 // router/index.ts - 路由懒加载
 {
   path: '/dashboard',
@@ -1032,7 +1032,7 @@ export function processAlert(data: {
 
 **ECharts 按需引入:**
 
-```typescript
+``typescript
 // 只引入需要的图表类型,减少打包体积
 import { LineChart, PieChart } from 'echarts/charts'
 use([LineChart, PieChart])
@@ -1040,7 +1040,7 @@ use([LineChart, PieChart])
 
 **防抖处理:**
 
-```typescript
+``typescript
 import { debounce } from 'lodash-es'
 
 const updateChart = debounce(() => {
@@ -1052,7 +1052,7 @@ const updateChart = debounce(() => {
 
 **全局错误处理:**
 
-```typescript
+``typescript
 // main.ts
 app.config.errorHandler = (err, vm, info) => {
   console.error('Vue Error:', err, info)
@@ -1062,7 +1062,7 @@ app.config.errorHandler = (err, vm, info) => {
 
 **异步错误处理:**
 
-```typescript
+``typescript
 try {
   await userStore.login(username, password)
   ElMessage.success('登录成功')
@@ -1102,7 +1102,418 @@ wscat -c "ws://localhost:8080/api/ws/health-monitor?userId=1"
 
 ---
 
-## 9. 常见问题
+## 9. ECG心电图分析接口 (v1.3.0)
+
+### 9.1 分析ECG数据
+
+**接口地址:** `POST /api/ecg/analyze`
+
+**请求参数:**
+- Query Parameters:
+  - `userId` (Long, 必填) - 用户ID
+  - `deviceId` (Long, 必填) - 设备ID
+- Request Body (JSON):
+  ```json
+  {
+    "waveform": "base64_encoded_waveform_data",
+    "sampleRate": 250
+  }
+  ```
+
+**响应示例:**
+```json
+{
+  "code": 200,
+  "message": "操作成功",
+  "data": {
+    "id": 1,
+    "userId": 1,
+    "deviceId": 1,
+    "diagnosis": "NORMAL",
+    "arrhythmiaType": null,
+    "confidence": 0.95,
+    "modelVersion": "ECG-AI-v1.0.0",
+    "riskLevel": "LOW",
+    "recommendation": "心电图正常,请继续保持健康生活方式。",
+    "needsReview": 0,
+    "reviewStatus": "PENDING",
+    "createdAt": "2026-04-13T10:30:00"
+  },
+  "timestamp": 1713000000000
+}
+```
+
+**前端集成示例:**
+```typescript
+// api/ecg.ts
+import request from '@/utils/request'
+
+export function analyzeEcg(userId: number, deviceId: number, data: {
+  waveform: string
+  sampleRate: number
+}) {
+  return request.post(`/api/ecg/analyze?userId=${userId}&deviceId=${deviceId}`, data)
+}
+
+// 组件中使用
+const handleAnalyze = async () => {
+  try {
+    const result = await analyzeEcg(1, 1, {
+      waveform: ecgWaveformData,
+      sampleRate: 250
+    })
+    console.log('诊断结果:', result.data.diagnosis)
+  } catch (error) {
+    console.error('分析失败:', error)
+  }
+}
+```
+
+### 9.2 批量分析ECG数据
+
+**接口地址:** `POST /api/ecg/batch-analyze`
+
+**请求参数:**
+- Request Body (JSON Array):
+  ```json
+  [
+    {
+      "userId": 1,
+      "deviceId": 1,
+      "waveform": "waveform_data_1",
+      "sampleRate": 250
+    },
+    {
+      "userId": 2,
+      "deviceId": 2,
+      "waveform": "waveform_data_2",
+      "sampleRate": 500
+    }
+  ]
+  ```
+
+**响应示例:**
+```json
+{
+  "code": 200,
+  "message": "操作成功",
+  "data": [
+    { "id": 1, "diagnosis": "NORMAL", ... },
+    { "id": 2, "diagnosis": "ABNORMAL", ... }
+  ],
+  "timestamp": 1713000000000
+}
+```
+
+### 9.3 获取用户ECG分析历史
+
+**接口地址:** `GET /api/ecg/history`
+
+**请求参数:**
+- Query Parameters:
+  - `userId` (Long, 必填) - 用户ID
+  - `page` (Integer, 可选, 默认1) - 页码
+  - `size` (Integer, 可选, 默认10) - 每页大小
+
+**响应示例:**
+```json
+{
+  "code": 200,
+  "message": "操作成功",
+  "data": [
+    {
+      "id": 5,
+      "userId": 1,
+      "diagnosis": "NORMAL",
+      "confidence": 0.97,
+      "riskLevel": "LOW",
+      "createdAt": "2026-04-13T09:00:00"
+    },
+    {
+      "id": 4,
+      "userId": 1,
+      "diagnosis": "NORMAL",
+      "confidence": 0.95,
+      "riskLevel": "LOW",
+      "createdAt": "2026-04-12T15:30:00"
+    }
+  ],
+  "timestamp": 1713000000000
+}
+```
+
+**前端集成示例:**
+``vue
+<script setup lang="ts">
+import { ref, onMounted } from 'vue'
+import { getEcgHistory } from '@/api/ecg'
+
+const historyList = ref([])
+
+const loadHistory = async () => {
+  const res = await getEcgHistory(1, 1, 10)
+  historyList.value = res.data
+}
+
+onMounted(() => {
+  loadHistory()
+})
+</script>
+
+<template>
+  <el-table :data="historyList">
+    <el-table-column prop="diagnosis" label="诊断结果" />
+    <el-table-column prop="confidence" label="置信度">
+      <template #default="{ row }">
+        {{ (row.confidence * 100).toFixed(2) }}%
+      </template>
+    </el-table-column>
+    <el-table-column prop="riskLevel" label="风险等级">
+      <template #default="{ row }">
+        <el-tag :type="getRiskType(row.riskLevel)">
+          {{ row.riskLevel }}
+        </el-tag>
+      </template>
+    </el-table-column>
+  </el-table>
+</template>
+```
+
+### 9.4 获取分析结果详情
+
+**接口地址:** `GET /api/ecg/result/{resultId}`
+
+**请求参数:**
+- Path Parameters:
+  - `resultId` (Long, 必填) - 分析结果ID
+
+**响应示例:**
+```json
+{
+  "code": 200,
+  "message": "操作成功",
+  "data": {
+    "id": 1,
+    "userId": 1,
+    "deviceId": 1,
+    "ecgDataId": "ecg-test-001",
+    "diagnosis": "NORMAL",
+    "arrhythmiaType": null,
+    "confidence": 0.95,
+    "modelVersion": "ECG-AI-v1.0.0",
+    "analysisReport": "{\"diagnosis\":\"NORMAL\",\"confidence\":0.95,\"riskLevel\":\"LOW\"}",
+    "riskLevel": "LOW",
+    "recommendation": "心电图正常,请继续保持健康生活方式。",
+    "needsReview": 0,
+    "reviewStatus": "APPROVED",
+    "reviewedBy": 100,
+    "reviewedAt": "2026-04-13T11:00:00",
+    "reviewComment": "确认正常",
+    "createdAt": "2026-04-13T10:30:00",
+    "updatedAt": "2026-04-13T11:00:00"
+  },
+  "timestamp": 1713000000000
+}
+```
+
+### 9.5 医生审核分析结果
+
+**接口地址:** `PUT /api/ecg/review/{resultId}`
+
+**请求参数:**
+- Path Parameters:
+  - `resultId` (Long, 必填) - 分析结果ID
+- Query Parameters:
+  - `doctorId` (Long, 必填) - 医生ID
+  - `reviewStatus` (String, 必填) - 审核状态 (APPROVED/REJECTED)
+  - `comment` (String, 可选) - 审核意见
+
+**响应示例:**
+```json
+{
+  "code": 200,
+  "message": "操作成功",
+  "data": {
+    "id": 2,
+    "reviewStatus": "APPROVED",
+    "reviewedBy": 100,
+    "reviewedAt": "2026-04-13T14:30:00",
+    "reviewComment": "建议定期复查"
+  },
+  "timestamp": 1713000000000
+}
+```
+
+**前端集成示例:**
+``vue
+<script setup lang="ts">
+import { reviewEcgResult } from '@/api/ecg'
+
+const handleReview = async (resultId: number, status: string, comment: string) => {
+  try {
+    await reviewEcgResult(resultId, doctorId.value, status, comment)
+    ElMessage.success('审核成功')
+    loadPendingReviews() // 刷新待审核列表
+  } catch (error) {
+    ElMessage.error('审核失败')
+  }
+}
+</script>
+
+<template>
+  <el-dialog title="审核ECG结果" v-model="dialogVisible">
+    <el-radio-group v-model="reviewStatus">
+      <el-radio label="APPROVED">通过</el-radio>
+      <el-radio label="REJECTED">拒绝</el-radio>
+    </el-radio-group>
+    <el-input 
+      v-model="reviewComment" 
+      type="textarea" 
+      placeholder="请输入审核意见"
+    />
+    <template #footer>
+      <el-button @click="dialogVisible = false">取消</el-button>
+      <el-button type="primary" @click="handleReview(currentResultId, reviewStatus, reviewComment)">
+        提交
+      </el-button>
+    </template>
+  </el-dialog>
+</template>
+```
+
+### 9.6 生成ECG诊断报告
+
+**接口地址:** `GET /api/ecg/report/{resultId}`
+
+**请求参数:**
+- Path Parameters:
+  - `resultId` (Long, 必填) - 分析结果ID
+
+**响应示例:**
+```
+{
+  "code": 200,
+  "message": "操作成功",
+  "data": "# ECG心电图诊断报告\n\n**报告ID**: 1\n**生成时间**: 2026-04-13T10:30:00\n\n## 基本信息\n- **用户ID**: 1\n- **设备ID**: 1\n- **AI模型版本**: ECG-AI-v1.0.0\n\n## 诊断结果\n- **诊断**: NORMAL\n- **AI置信度**: 95.00%\n- **风险等级**: LOW\n\n## 建议措施\n心电图正常,请继续保持健康生活方式。\n\n## 医生审核\n- **审核状态**: APPROVED\n- **审核医生**: 100\n- **审核时间**: 2026-04-13T11:00:00\n- **审核意见**: 确认正常",
+  "timestamp": 1713000000000
+}
+```
+
+**前端集成示例:**
+``vue
+<script setup lang="ts">
+import { getEcgReport } from '@/api/ecg'
+import MarkdownIt from 'markdown-it'
+
+const md = new MarkdownIt()
+const reportContent = ref('')
+
+const loadReport = async (resultId: number) => {
+  const res = await getEcgReport(resultId)
+  reportContent.value = md.render(res.data)
+}
+</script>
+
+<template>
+  <div class="report-container" v-html="reportContent"></div>
+</template>
+
+<style scoped>
+.report-container {
+  padding: 20px;
+  background: #fff;
+  border-radius: 8px;
+}
+</style>
+```
+
+### 9.7 统计用户ECG异常情况
+
+**接口地址:** `GET /api/ecg/statistics/abnormal`
+
+**请求参数:**
+- Query Parameters:
+  - `userId` (Long, 必填) - 用户ID
+  - `startDate` (String, 可选) - 开始日期 (ISO 8601格式)
+  - `endDate` (String, 可选) - 结束日期 (ISO 8601格式)
+
+**响应示例:**
+```json
+{
+  "code": 200,
+  "message": "操作成功",
+  "data": {
+    "totalAbnormal": 5,
+    "arrhythmiaTypes": {
+      "AFIB": 2,
+      "PVC": 2,
+      "ST_ELEVATION": 1
+    },
+    "riskDistribution": {
+      "HIGH": 2,
+      "MEDIUM": 2,
+      "CRITICAL": 1
+    }
+  },
+  "timestamp": 1713000000000
+}
+```
+
+**前端集成示例 (ECharts 可视化):**
+```vue
+<script setup lang="ts">
+import VChart from 'vue-echarts'
+import { use } from 'echarts/core'
+import { PieChart } from 'echarts/charts'
+import { getEcgAbnormalStats } from '@/api/ecg'
+
+use([PieChart])
+
+const stats = ref(null)
+
+const loadStats = async () => {
+  const res = await getEcgAbnormalStats(userId.value, startDate, endDate)
+  stats.value = res.data
+  
+  // 更新图表
+  updateChart()
+}
+
+const chartOption = computed(() => ({
+  title: { text: '心律失常类型分布', left: 'center' },
+  tooltip: { trigger: 'item' },
+  series: [{
+    type: 'pie',
+    radius: '50%',
+    data: Object.entries(stats.value?.arrhythmiaTypes || {}).map(([name, value]) => ({
+      name,
+      value
+    })),
+    emphasis: {
+      itemStyle: {
+        shadowBlur: 10,
+        shadowOffsetX: 0,
+        shadowColor: 'rgba(0, 0, 0, 0.5)'
+      }
+    }
+  }]
+}))
+</script>
+
+<template>
+  <div class="stats-container">
+    <div class="stat-card">
+      <h3>异常总数</h3>
+      <p class="stat-value">{{ stats?.totalAbnormal || 0 }}</p>
+    </div>
+    <v-chart :option="chartOption" style="height: 300px" />
+  </div>
+</template>
+```
+
+---
+
+## 10. 常见问题
 
 ### Q1: Token 过期如何处理?
 
@@ -1123,6 +1534,14 @@ wscat -c "ws://localhost:8080/api/ws/health-monitor?userId=1"
 ---
 
 ## 更新日志
+
+### v1.3.0 (2026-04-13)
+- 新增ECG心电图分析模块
+- 添加7个ECG分析REST API接口
+- 完善医生审核流程接口规范
+- 补充诊断报告生成接口
+- 添加异常统计接口及ECharts可视化示例
+- 提供完整的前端集成代码示例
 
 ### v1.2.0 (2026-04-12)
 - 新增前端 Vue 3 项目
